@@ -1,21 +1,15 @@
 module Workflow
 
+include("utils.jl")
 include("ast.jl")
 include("macros.jl")
 include("graph.jl")
 
-struct FlowGraph
-    graph::Graph
-    name::Symbol
-    begin_node::Int64
-    end_node::Int64
+struct Value{T}
+    node::Node
 end
 
-function FlowGraph(name::Symbol)
-    graph = Graph()
-    begin_node = push_node!(graph; type=:begin)
-    end_node = push_node!(graph; type=:end)
-    FlowGraph(graph, name, begin_node, end_node)
-end
+type(::Value{T}) where T = T
 
+export FlowGraph, @workflow
 end

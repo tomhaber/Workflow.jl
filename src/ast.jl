@@ -7,7 +7,7 @@ toExH(s::Symbol) = s
 toExH(ex::Expr) = ExH{ex.head}(ex.head, ex.args)
 toExpr(ex::ExH) = Expr(ex.head, ex.args...)
 
-ExEqual = ExH{:(=)}
+ExAssign = ExH{:(=)}
 ExDColon = ExH{:(::)}
 ExKw = ExH{:kw}
 ExCurly = ExH{:curly}
@@ -25,13 +25,13 @@ isDot(ex)      = isa(ex, Expr) && ex.head == :.   && isa(ex.args[1], Symbol)
 isRef(ex)      = isa(ex, Expr) && ex.head == :ref && isa(ex.args[1], Symbol)
 
 ## variable symbol sampling functions
-getSymbols(ex::Any)    = Set{Symbol}()
-getSymbols(ex::Symbol) = Set{Symbol}([ex])
-getSymbols(ex::Array)  = mapreduce(getSymbols, union, ex)
-getSymbols(ex::Expr)   = getSymbols(toExH(ex))
-getSymbols(ex::ExH)    = mapreduce(getSymbols, union, ex.args)
-getSymbols(ex::ExQuote)= Set{Symbol}()
-getSymbols(ex::ExCall) = mapreduce(getSymbols, union, ex.args[2:end])  # skip function name
-getSymbols(ex::ExMacro) = mapreduce(getSymbols, union, ex.args[2:end])  # skip macro name
-getSymbols(ex::ExRef)  = setdiff(mapreduce(getSymbols, union, ex.args), Set([:(:), symbol("end")]) )# ':'' and 'end' do not count
-getSymbols(ex::ExDot)  = Set{Symbol}([ex.args[1]])  # return variable, not fields
+get_symbols(ex::Any)    = Set{Symbol}()
+get_symbols(ex::Symbol) = Set{Symbol}([ex])
+get_symbols(ex::Array)  = mapreduce(get_symbols, union, ex)
+get_symbols(ex::Expr)   = get_symbols(toExH(ex))
+get_symbols(ex::ExH)    = mapreduce(get_symbols, union, ex.args)
+get_symbols(ex::ExQuote)= Set{Symbol}()
+get_symbols(ex::ExCall) = mapreduce(get_symbols, union, ex.args[2:end])  # skip function name
+get_symbols(ex::ExMacro) = mapreduce(get_symbols, union, ex.args[2:end])  # skip macro name
+get_symbols(ex::ExRef)  = setdiff(mapreduce(get_symbols, union, ex.args), Set([:(:), symbol("end")]) )# ':'' and 'end' do not count
+get_symbols(ex::ExDot)  = Set{Symbol}([ex.args[1]])  # return variable, not fields
