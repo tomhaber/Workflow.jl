@@ -26,7 +26,6 @@ function is_short_function_def(ex)
 end
 
 function infertypes(@nospecialize(f), @nospecialize(types=Tuple))
-    rt = Base.return_types(f, types)
-    @assert length(rt) == 1
-    return first(rt)
+    RT = Base.return_types(f, types)
+    return Union{RT...}
 end
