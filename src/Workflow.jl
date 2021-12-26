@@ -1,9 +1,9 @@
 module Workflow
 
 include("utils.jl")
-include("ast.jl")
-include("macros.jl")
 include("graph.jl")
+include("FlowAnalyzer.jl")
+include("compile.jl")
 
-export FlowGraph, @workflow
+export FlowGraph, CompiledGraph, @workflow
 end

@@ -45,10 +45,11 @@ end
 function FlowGraph(name::Symbol, self::Function, argtypes::Tuple, rettype::Type)
     T = Tuple{argtypes...}
     R = rettype
+    input_types = Tuple{typeof(self), argtypes...}
 
     graph = Graph()
-    begin_node = push_node!(graph; name=:begin, type=T)
-    end_node = push_node!(graph; name=:end, type=rettype)
+    begin_node = push_node!(graph; name=:begin, input_types=input_types, type=T)
+    end_node = push_node!(graph; name=:end, input_types=Tuple{rettype}, type=rettype)
     FlowGraph{T,R}(graph, name, self, begin_node, end_node)
 end
 
@@ -57,8 +58,12 @@ connect!(g::FlowGraph, src::Node, dst::Node; pv...) = add_edge_meta!(g.graph, sr
 connect_to_input!(g::FlowGraph, dst::Node, arg::Int; pv...) = connect!(g, g.begin_node, dst; arg=arg, pv...)
 connect_to_output!(g::FlowGraph, src::Node; pv...) = connect!(g, src, g.end_node; pv...)
 
-(g::FlowGraph{T})(x...) where T = g(T(x...))
-(g::FlowGraph{T})(x::T) where T = error("NYI")
+is_begin_node(fg::FlowGraph, n::Node) = n == fg.begin_node
+end_node(fg::FlowGraph) = fg.end_node
+
+function all_inputs(fg::FlowGraph, n::Node)
+    ((src,get_prop(fg.graph, Edge(src, n), :idx)) for src in inneighbors(fg.graph, n))
+end
 
 function save(fn::AbstractString, g::FlowGraph)
     open(fn, "w") do io
@@ -99,3 +104,21 @@ function prune_unreachable!(fg::FlowGraph)
     end
     fg
 end
+
+node_meta(fg::FlowGraph, n::Node, which::Symbol) = get_prop(fg.graph, n, which)
+
+function node_expression(fg::FlowGraph, n::Node)
+    input_types = get_prop(fg.graph, n, :input_types)
+    body = get_prop(fg.graph, n, :expr)
+    args = get_prop(fg.graph, n, :args)
+    body, args, input_types
+end
+
+has_expression(fg::FlowGraph, n::Node) = has_prop(fg.graph, n, :expr)
+
+import Base: iterate, length
+iterate(fg::FlowGraph) = iterate(1:nv(fg.graph))
+iterate(fg::FlowGraph, state::Node) = iterate(1:nv(fg.graph), state)
+length(fg::FlowGraph) = nv(fg.graph)
+
+topological_sort(fg::FlowGraph) = topological_sort_by_dfs(fg.graph)

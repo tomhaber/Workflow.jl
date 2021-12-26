@@ -118,24 +118,31 @@ function _type(code::CodeInfo, idx::Int)
     return isassigned(types, idx) ? types[idx] : nothing
 end
 
-function construct_inputs!(graph::FlowGraph, ci::CodeInfo, nargs::Int)
+function construct_inputs!(graph::FlowGraph, ci::CodeInfo, types::Tuple)
+    input_types = Tuple{Tuple{typeof(graph.self), types...}}
+
     getindex = GlobalRef(Base, :getindex)
     function construct_arg(i::Int)
         T = ci.slottypes[i]
         name = ci.slotnames[i]
 
         ex = Expr(:call, getindex, :X, i)
-        n = push_node!(graph; name=:getindex, expr=ex, args=[:X], type=T)
-        connect_to_input!(graph, n, i, name=name)
+        n = push_node!(graph;
+                    name=:getindex,
+                    expr=ex,
+                    args=[:X],
+                    input_types=input_types,
+                    type=T)
+        connect_to_input!(graph, n, i, name=name, idx=1)
         n
     end
 
-    map(construct_arg, 1:nargs+1) # include self
+    map(construct_arg, 1:length(types)+1) # include self
 end
 
 function convert_to_graph!(graph::FlowGraph, ci::CodeInfo, types::Tuple)
     stmts = ci.code
-    argnodes = construct_inputs!(graph, ci, length(types))
+    argnodes = construct_inputs!(graph, ci, types)
     ssanodes = Vector{Node}(undef, length(stmts))
 
     for idx in 1:length(stmts)
@@ -147,31 +154,39 @@ function convert_to_graph!(graph::FlowGraph, ci::CodeInfo, types::Tuple)
 
             args = Symbol[]
             edges = Node[]
+            input_types = DataType[]
             for (i, arg) in enumerate(ex.args)
                 if arg isa SSAValue
                     x = gensym("x");
                     push!(args, x)
                     push!(edges, ssanodes[arg.id])
+                    push!(input_types, node_meta(graph, ssanodes[arg.id], :type))
                     ex.args[i] = x
                 elseif arg isa Argument
                     x = gensym("X");
                     push!(args, x)
                     push!(edges, argnodes[arg.n])
+                    push!(input_types, node_meta(graph, argnodes[arg.n], :type))
                     ex.args[i] = x
                 end
             end
 
             name = Symbol(ex.args[1])
-            n = push_node!(graph; name=name, expr=ex, args=args, type=T)
+            n = push_node!(graph;
+                            name=name,
+                            expr=ex,
+                            args=args,
+                            input_types=Tuple{input_types...},
+                            type=T)
             ssanodes[idx] = n
 
-            for (src, name) in zip(edges, args)
-                connect!(graph, src, n; name=name)
+            for (i, src, name) in zip(Iterators.countfrom(), edges, args)
+                connect!(graph, src, n; name=name, idx=i)
             end
         elseif stmt isa ReturnNode
             val = stmt.val
             val isa SSAValue || error("unknown return statement: $stmt")
-            connect_to_output!(graph, ssanodes[val.id]; type = T)
+            connect_to_output!(graph, ssanodes[val.id]; type = T, idx=1)
         elseif stmt isa GlobalRef
             @warn "GlobalRef found: $stmt"
         elseif stmt isa GotoIfNot || stmt isa GotoNode
