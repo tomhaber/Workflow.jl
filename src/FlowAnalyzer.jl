@@ -118,6 +118,10 @@ function _type(code::CodeInfo, idx::Int)
     return isassigned(types, idx) ? types[idx] : nothing
 end
 
+function invoke_to_call(ex::Expr)
+    Expr(:call, ex.args[2:end]...)
+end
+
 function construct_inputs!(graph::FlowGraph, ci::CodeInfo, types::Tuple)
     input_types = Tuple{Tuple{typeof(graph.self), types...}}
 
@@ -154,12 +158,13 @@ function convert_to_graph!(graph::FlowGraph, ci::CodeInfo, types::Tuple)
 
             args = Symbol[]
             edges = Node[]
-            input_types = DataType[]
+            input_types = Any[]
             for (i, arg) in enumerate(ex.args)
                 if arg isa SSAValue
                     x = gensym("x");
                     push!(args, x)
                     push!(edges, ssanodes[arg.id])
+                    @info "ssa $(arg.id) stmt $idx: $stmt"
                     push!(input_types, node_meta(graph, ssanodes[arg.id], :type))
                     ex.args[i] = x
                 elseif arg isa Argument
@@ -169,6 +174,10 @@ function convert_to_graph!(graph::FlowGraph, ci::CodeInfo, types::Tuple)
                     push!(input_types, node_meta(graph, argnodes[arg.n], :type))
                     ex.args[i] = x
                 end
+            end
+
+            if ex.head == :invoke
+                ex = invoke_to_call(ex)
             end
 
             name = Symbol(ex.args[1])
@@ -184,11 +193,20 @@ function convert_to_graph!(graph::FlowGraph, ci::CodeInfo, types::Tuple)
                 connect!(graph, src, n; name=name, idx=i)
             end
         elseif stmt isa ReturnNode
-            val = stmt.val
-            val isa SSAValue || error("unknown return statement: $stmt")
-            connect_to_output!(graph, ssanodes[val.id]; type = T, idx=1)
+            if isdefined(stmt, :val)
+                val = stmt.val
+                val isa SSAValue || error("unknown return statement: $stmt")
+                connect_to_output!(graph, ssanodes[val.id]; type = T, idx=1)
+            end
         elseif stmt isa GlobalRef
-            @warn "GlobalRef found: $stmt"
+            x = getfield(stmt.mod, stmt.name)
+            n = push_node!(graph;
+                name=stmt.name,
+                expr=Expr(:call, :getfield, stmt.mod, QuoteNode(stmt.name)),
+                args=Symbol[],
+                input_types=Tuple{},
+                type=typeof(x))
+            ssanodes[idx] = n
         elseif stmt isa GotoIfNot || stmt isa GotoNode
         elseif stmt isa PiNode
             val = stmt.val
@@ -196,7 +214,7 @@ function convert_to_graph!(graph::FlowGraph, ci::CodeInfo, types::Tuple)
             ssanodes[idx] = ssanodes[val.id]
         elseif stmt isa PhiNode
         else
-            error("Unknown statement type: $stmt")
+            @warn ("Unknown statement type: $stmt")
         end
     end
 

@@ -10,11 +10,16 @@ function compile_function(body::Expr, args::Vector{Symbol}, input_types::Type{<:
 end
 
 function compile_node(fg::FlowGraph, n::Node)
-    if has_expression(fg, n)
-        body, args, input_types = node_expression(fg, n)
-        compile_function(body, args, input_types)
-    else
-        identity
+    try
+        if has_expression(fg, n)
+            body, args, input_types = node_expression(fg, n)
+            compile_function(body, args, input_types)
+        else
+            identity
+        end
+    catch
+        @warn "error compiling node $n"
+        rethrow()
     end
 end
 
@@ -32,27 +37,32 @@ function CompiledGraph(fg::FlowGraph{T,R}) where {T,R}
 end
 
 (g::CompiledGraph{T, R})(x...) where {T, R} = g(T(x))
-function (g::CompiledGraph{T, R})(X::T)::R where {T, R}
+function (g::CompiledGraph{T, R})(X::T) where {T, R}
     X = (g.graph.self, X...)
 
     intermediates = Vector{Any}(undef, length(g.graph))
     order = topological_sort(g.graph)
 
-    for n in order
-        f = g.code[n]
-        if is_begin_node(g.graph, n)
-            intermediates[n] = f(X)
-        else
-            Input = node_meta(g.graph, n, :input_types)
-            inputs = Vector{Any}(undef, fieldcount(Input))
-            for (v, i) in all_inputs(g.graph, n)
-                inputs[i] = intermediates[v]
+    try
+        for n in order
+            f = g.code[n]
+            if is_begin_node(g.graph, n)
+                intermediates[n] = f(X)
+            else
+                Input = node_meta(g.graph, n, :input_types)
+                inputs = Vector{Any}(undef, fieldcount(Input))
+                for (v, i) in all_inputs(g.graph, n)
+                    inputs[i] = intermediates[v]
+                end
+                x = Input(inputs)
+                intermediates[n] = f(x)
             end
-            x = Input(inputs)
-            intermediates[n] = f(x)
         end
+    catch e
+        @warn "exception: $e"
     end
 
-    first(intermediates[end_node(g.graph)])
+    intermediates
+    #first(intermediates[end_node(g.graph)])
 end
 
