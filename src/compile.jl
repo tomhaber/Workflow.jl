@@ -43,26 +43,22 @@ function (g::CompiledGraph{T, R})(X::T) where {T, R}
     intermediates = Vector{Any}(undef, length(g.graph))
     order = topological_sort(g.graph)
 
-    try
-        for n in order
-            f = g.code[n]
-            if is_begin_node(g.graph, n)
-                intermediates[n] = f(X)
-            else
-                Input = node_meta(g.graph, n, :input_types)
-                inputs = Vector{Any}(undef, fieldcount(Input))
-                for (v, i) in all_inputs(g.graph, n)
-                    inputs[i] = intermediates[v]
-                end
-                x = Input(inputs)
-                intermediates[n] = f(x)
+    for n in order
+        f = g.code[n]
+        if is_begin_node(g.graph, n)
+            intermediates[n] = f(X)
+        else
+            Input = node_meta(g.graph, n, :input_types)
+            inputs = Vector{Any}(undef, fieldcount(Input))
+            for (v, i) in all_inputs(g.graph, n)
+                inputs[i] = intermediates[v]
             end
+            x = Input(inputs)
+            intermediates[n] = f(x)
         end
-    catch e
-        @warn "exception: $e"
     end
 
-    intermediates
-    #first(intermediates[end_node(g.graph)])
+    #intermediates
+    first(intermediates[end_node(g.graph)])
 end
 

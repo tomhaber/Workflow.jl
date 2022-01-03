@@ -105,7 +105,13 @@ function prune_unreachable!(fg::FlowGraph)
     fg
 end
 
-node_meta(fg::FlowGraph, n::Node, which::Symbol) = get_prop(fg.graph, n, which)
+function node_meta(fg::FlowGraph, n::Node, which::Symbol)
+    # if ! has_prop(fg.graph, n, which)
+    #     @warn "node $n has no $which property: $(props(fg.graph, n))"
+    # end
+
+    get_prop(fg.graph, n, which)
+end
 
 function node_expression(fg::FlowGraph, n::Node)
     input_types = get_prop(fg.graph, n, :input_types)
