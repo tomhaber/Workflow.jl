@@ -15,7 +15,11 @@ function compile_node(fg::FlowGraph, n::Node)
             body, args, input_types = node_expression(fg, n)
             compile_function(body, args, input_types)
         else
-            identity
+            if n == fg.end_node
+                first
+            else
+                identity
+            end
         end
     catch
         @warn "error compiling node $n"
@@ -59,6 +63,6 @@ function (g::CompiledGraph{T, R})(X::T) where {T, R}
     end
 
     #intermediates
-    first(intermediates[end_node(g.graph)])
+    intermediates[end_node(g.graph)]
 end
 

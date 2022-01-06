@@ -112,6 +112,8 @@ function function_to_graph(@nospecialize(f), @nospecialize(types=Tuple{}))
     convert_to_graph!(graph, ci, types)
 end
 
+FlowGraph(@nospecialize(f), @nospecialize(types=Tuple{})) = function_to_graph(f, types)
+
 function _type(code::CodeInfo, idx::Int)
     types = code.ssavaluetypes
     types isa Vector{Any} || return nothing
@@ -164,7 +166,6 @@ function convert_to_graph!(graph::FlowGraph, ci::CodeInfo, types::Tuple)
                     x = gensym("x");
                     push!(args, x)
                     push!(edges, ssanodes[arg.id])
-                    @info "ssa $(arg.id) stmt $idx: $stmt"
                     push!(input_types, node_meta(graph, ssanodes[arg.id], :type))
                     ex.args[i] = x
                 elseif arg isa Argument
@@ -199,13 +200,12 @@ function convert_to_graph!(graph::FlowGraph, ci::CodeInfo, types::Tuple)
                 connect_to_output!(graph, ssanodes[val.id]; type = T, idx=1)
             end
         elseif stmt isa GlobalRef
-            x = getfield(stmt.mod, stmt.name)
             n = push_node!(graph;
                 name=stmt.name,
                 expr=Expr(:call, :getfield, stmt.mod, QuoteNode(stmt.name)),
                 args=Symbol[],
                 input_types=Tuple{},
-                type=typeof(x))
+                type=T)
             ssanodes[idx] = n
         elseif stmt isa GotoIfNot || stmt isa GotoNode
         elseif stmt isa PiNode
