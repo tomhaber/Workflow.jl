@@ -1,6 +1,7 @@
 module Workflow
 
 include("utils.jl")
+include("nodetypes.jl")
 include("graph.jl")
 include("FlowAnalyzer.jl")
 include("compile.jl")

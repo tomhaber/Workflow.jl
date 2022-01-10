@@ -1,7 +1,7 @@
-using LightGraphs, MetaGraphs
+using Graphs
 
 Node = Int64
-Graph = MetaDiGraph{Node, Float64}
+Graph = DiGraph{Node}
 
 function push_node!(g::Graph; pv...)
     add_vertex!(g)
@@ -28,18 +28,13 @@ function add_edge_meta!(g::Graph, src::Node, dst::Node; pv...)
     e
 end
 
-struct Value{T}
-    node::Node
-end
-
-type(::Value{T}) where T = T
-
 struct FlowGraph{T,R}
     graph::Graph
     name::Symbol
     self::Function
     begin_node::Node
     end_node::Node
+    nodes::Vector{NodeType}
 end
 
 function FlowGraph(name::Symbol, self::Function, argtypes::Tuple, rettype::Type)
@@ -48,9 +43,9 @@ function FlowGraph(name::Symbol, self::Function, argtypes::Tuple, rettype::Type)
     input_types = Tuple{typeof(self), argtypes...}
 
     graph = Graph()
-    begin_node = push_node!(graph; name=:begin, input_types=input_types, type=T)
-    end_node = push_node!(graph; name=:end, input_types=Tuple{rettype}, type=rettype)
-    FlowGraph{T,R}(graph, name, self, begin_node, end_node)
+    begin_node = push_node!(graph)
+    end_node = push_node!(graph)
+    FlowGraph{T,R}(graph, name, self, begin_node, end_node, [BeginNode(input_types), EndNode(rettype)])
 end
 
 push_node!(g::FlowGraph; pv...) = push_node!(g.graph; pv...)
