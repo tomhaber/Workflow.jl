@@ -133,13 +133,8 @@ function construct_inputs!(graph::FlowGraph, ci::CodeInfo, types::Tuple)
         name = ci.slotnames[i]
 
         ex = Expr(:call, getindex, :X, i)
-        n = push_node!(graph;
-                    name=:getindex,
-                    expr=ex,
-                    args=[:X],
-                    input_types=input_types,
-                    type=T)
-        connect_to_input!(graph, n, i, name=name, idx=1)
+        n = push_node!(graph, CallNode(ex, input_types, [:X], T))
+        connect_to_input!(graph, n, i, name)
         n
     end
 
@@ -166,13 +161,13 @@ function convert_to_graph!(graph::FlowGraph, ci::CodeInfo, types::Tuple)
                     x = gensym("x");
                     push!(args, x)
                     push!(edges, ssanodes[arg.id])
-                    push!(input_types, node_meta(graph, ssanodes[arg.id], :type))
+                    push!(input_types, nodetype(graph, ssanodes[arg.id]))
                     ex.args[i] = x
                 elseif arg isa Argument
                     x = gensym("X");
                     push!(args, x)
                     push!(edges, argnodes[arg.n])
-                    push!(input_types, node_meta(graph, argnodes[arg.n], :type))
+                    push!(input_types, nodetype(graph, argnodes[arg.n]))
                     ex.args[i] = x
                 end
             end
@@ -182,37 +177,27 @@ function convert_to_graph!(graph::FlowGraph, ci::CodeInfo, types::Tuple)
             end
 
             name = Symbol(ex.args[1])
-            n = push_node!(graph;
-                            name=name,
-                            expr=ex,
-                            args=args,
-                            input_types=Tuple{input_types...},
-                            type=T)
+            n = push_node!(graph, CallNode(ex, Tuple{input_types...}, args, T))
             ssanodes[idx] = n
 
             for (i, src, name) in zip(Iterators.countfrom(), edges, args)
-                connect!(graph, src, n; name=name, idx=i)
+                connect!(graph, src, n, i, name)
             end
         elseif stmt isa ReturnNode
             if isdefined(stmt, :val)
                 val = stmt.val
                 val isa SSAValue || error("unknown return statement: $stmt")
-                connect_to_output!(graph, ssanodes[val.id]; type = T, idx=1)
+                connect_to_output!(graph, ssanodes[val.id])
             end
         elseif stmt isa GlobalRef
-            n = push_node!(graph;
-                name=stmt.name,
-                expr=Expr(:call, :getfield, stmt.mod, QuoteNode(stmt.name)),
-                args=Symbol[],
-                input_types=Tuple{},
-                type=T)
+            n = push_node!(graph, GlobalRefNode(stmt, T))
             ssanodes[idx] = n
-        elseif stmt isa GotoIfNot || stmt isa GotoNode
         elseif stmt isa PiNode
             val = stmt.val
             val isa SSAValue || error("unknown return statement: $stmt")
             ssanodes[idx] = ssanodes[val.id]
-        elseif stmt isa PhiNode
+        #elseif stmt isa PhiNode
+        #elseif stmt isa GotoIfNot || stmt isa GotoNode
         else
             @warn ("Unknown statement type: $stmt")
         end

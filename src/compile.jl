@@ -1,3 +1,8 @@
+function compile_function(body::Expr)
+    ex = Expr(:function, Expr(:tuple), body)
+    eval(ex)
+end
+
 function compile_function(body::Expr, args::Vector{Symbol}, input_types::Type{<:Tuple})
     X = gensym("input")
     argget = map(enumerate(args)) do (i,x)
@@ -9,27 +14,14 @@ function compile_function(body::Expr, args::Vector{Symbol}, input_types::Type{<:
     eval(ex)
 end
 
-function compile_node(fg::FlowGraph, n::Node)
-    try
-        if has_expression(fg, n)
-            body, args, input_types = node_expression(fg, n)
-            compile_function(body, args, input_types)
-        else
-            if n == fg.end_node
-                first
-            else
-                identity
-            end
-        end
-    catch
-        @warn "error compiling node $n"
-        rethrow()
-    end
-end
+compile_node(::BeginNode) = identity
+compile_node(::EndNode) = first
+compile_node(n::ConstantNode) = compile_function(Expr(:call, identity, n.val))
+compile_node(n::GlobalRefNode) = compile_function(Expr(:call, Base.getfield, n.ref.mod, QuoteNode(n.ref.name)))
+compile_node(n::CallNode) = compile_function(n.ex, n.args, n.input_types)
 
-function compile_graph(fg::FlowGraph)
-    [compile_node(fg, n) for n in fg]
-end
+compile_node(fg::FlowGraph, n::Node) = compile_node(find_node(fg, n))
+compile_graph(fg::FlowGraph) = [compile_node(fg, n) for n in fg]
 
 struct CompiledGraph{T,R}
     graph::FlowGraph{T,R}
